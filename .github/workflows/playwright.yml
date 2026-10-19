@@ -1,0 +1,148 @@
+
+name: MoroSystems QA Automation
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+
+  # ==========================================
+  # API TESTS
+  # ==========================================
+  api-tests:
+    name: API - Todo Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout test repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Validate TypeScript
+        run: npx tsc --noEmit
+
+      - name: Clone MoroSystems Todo backend
+        run: |
+          git clone https://github.com/morosystems/todo-be.git todo-be
+
+      - name: Install backend dependencies
+        working-directory: ./todo-be
+        run: npm install
+
+      - name: Start backend and wait for readiness
+        run: |
+          cd todo-be
+          nohup npm start > ../todo-backend.log 2>&1 &
+          cd ..
+
+          echo "Waiting for Todo API..."
+
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --fail \
+              --max-time 8 \
+              http://localhost:8080/tasks > /dev/null 2>&1; then
+
+              echo "Todo API is ready."
+              exit 0
+            fi
+
+            echo "Backend not ready, attempt $attempt/20."
+            sleep 3
+          done
+
+          echo "Todo backend failed to start."
+          cat todo-backend.log
+          exit 1
+
+      - name: Run API tests
+        env:
+          TODO_API_URL: http://localhost:8080
+        run: |
+          npx playwright test --project=api --workers=1
+
+      - name: Upload API HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-playwright-report
+          path: playwright-report/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload API diagnostic files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-diagnostics
+          path: |
+            test-results/
+            todo-backend.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ==========================================
+  # GUI CROSS-BROWSER TESTS
+  # ==========================================
+  gui-tests:
+    name: GUI - Cross Browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout test repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Validate TypeScript
+        run: npx tsc --noEmit
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run GUI tests without manual CAPTCHA
+        run: |
+          npx playwright test \
+            --project=chromium \
+            --project=firefox \
+            --project=webkit \
+            --grep-invert "@manual-captcha" \
+            --workers=1
+
+      - name: Upload GUI HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-playwright-report
+          path: playwright-report/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload GUI diagnostic files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-diagnostics
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
