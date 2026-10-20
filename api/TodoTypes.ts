@@ -1,8 +1,8 @@
-
 /**
- * Represents a task returned by MoroSystems Todo API.
+ * A task returned by the MoroSystems Todo API.
  *
- * Based on OpenAPI specification version 1.1.0.
+ * Matches the Task schema in OpenAPI v1.1.0. Dates are numeric timestamps;
+ * completedDate is optional because the API does not require it.
  */
 export interface TodoTask {
   id: string;
@@ -13,16 +13,16 @@ export interface TodoTask {
 }
 
 /**
- * JSON body required to create a task.
+ * Request body for POST /tasks.
+ * The OpenAPI schema marks the text property as required.
  */
 export interface CreateTaskRequest {
   text: string;
 }
 
 /**
- * JSON body required to update a task.
- *
- * The backend uses POST /tasks/{id}, not PUT.
+ * Request body for POST /tasks/{id}.
+ * The backend uses POST to update tasks, even though the assignment says PUT.
  */
 export interface UpdateTaskRequest {
   text: string;

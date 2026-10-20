@@ -1,129 +1,68 @@
-
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for MoroSystems QA assignment.
+ * Playwright configuration for the MoroSystems automation assignment.
  *
- * Test groups:
- * - tests/api: REST API integration tests
- * - tests/gui: browser-based UI tests
+ * The API project uses Playwright's request fixture and does not launch a
+ * browser. GUI projects execute the same browser tests in three engines.
  *
- * GUI tests run against Chromium, Firefox and WebKit.
- * API tests run without requiring a browser.
+ * The Google E2E test needs manual CAPTCHA assistance. GitHub Actions excludes
+ * its @manual-captcha tag; local developers can still run it explicitly.
  */
-
-const isCI = !!process.env.CI;
+const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
-
-  // Root directory containing all test files.
+  // Keep API and GUI tests in separate projects with their own test folders.
   testDir: './tests',
-
-  // Allow independent tests to run in parallel.
   fullyParallel: true,
-
-  // Prevent accidentally committed test.only().
   forbidOnly: isCI,
 
-  // Retry failed tests once on CI.
+  // Retry once on CI to help identify intermittent failures in the report.
   retries: isCI ? 1 : 0,
-
-  // Limit concurrency to avoid resource exhaustion.
   workers: isCI ? 1 : 2,
-
-  // Default timeout for each test.
   timeout: 30_000,
 
-  // Default timeout for Playwright expect assertions.
   expect: {
     timeout: 10_000,
   },
 
-  // Terminal and HTML reporting.
+  // Show individual steps in the console and preserve a shareable HTML report.
   reporter: [
     ['list', { printSteps: true }],
-    [
-      'html',
-      {
-        open: 'never',
-        outputFolder: 'playwright-report',
-      },
-    ],
+    ['html', { open: 'never', outputFolder: 'playwright-report' }],
   ],
 
-  // Settings shared by all test projects.
+  // Failure artifacts are available locally and in GitHub Actions reports.
   use: {
-
     locale: 'en-US',
-
     timezoneId: 'Europe/Prague',
-
     screenshot: 'only-on-failure',
-
     trace: 'retain-on-failure',
-
-    launchOptions: {
-      slowMo: 0,
-    },
   },
 
   projects: [
-
-    /**
-     * API PROJECT
-     *
-     * Uses Playwright APIRequestContext.
-     * No browser needs to be launched by the tests.
-     */
     {
       name: 'api',
-
       testDir: './tests/api',
-
       use: {
-        baseURL:
-          process.env.TODO_API_URL ??
-          'http://localhost:8080',
+        // Used by the request fixture and relative URLs in TodoApiClient.
+        baseURL: process.env.TODO_API_URL ?? 'http://localhost:8080',
       },
     },
-
-    /**
-     * GUI - CHROMIUM
-     */
     {
       name: 'chromium',
-
       testDir: './tests/gui',
-
-      use: {
-        ...devices['Desktop Chrome'],
-      },
+      use: { ...devices['Desktop Chrome'] },
     },
-
-    /**
-     * GUI - FIREFOX
-     */
     {
       name: 'firefox',
-
       testDir: './tests/gui',
-
-      use: {
-        ...devices['Desktop Firefox'],
-      },
+      use: { ...devices['Desktop Firefox'] },
     },
-
-    /**
-     * GUI - WEBKIT
-     */
     {
       name: 'webkit',
-
       testDir: './tests/gui',
-
-      use: {
-        ...devices['Desktop Safari'],
-      },
+      use: { ...devices['Desktop Safari'] },
     },
   ],
 });

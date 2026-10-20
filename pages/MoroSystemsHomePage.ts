@@ -1,181 +1,93 @@
-
-import { expect, type Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { BasePage } from './BasePage';
 
 /**
- * Page Object representing the company website homepage.
+ * Page Object for the MoroSystems website.
  *
- * Responsibilities:
- * - Navigate to the homepage using the website UI.
- * - Handle optional cookie consent.
- * - Verify the homepage.
- * - Navigate to the Careers page.
- *
- * Website URLs are supplied by the test.
- * Common browser operations are inherited from BasePage.
+ * Handles homepage navigation, optional cookie consent and navigation to
+ * Careers. Test data and destination URLs remain in the test scenarios.
  */
 export class MoroSystemsHomePage extends BasePage {
-
-  constructor(page: Page) {
-    super(page);
-  }
-
   /**
-   * Opens the homepage directly using the URL
-   * supplied by the test.
+   * Opens the homepage, handles optional cookies and verifies the destination.
+   * Used by independent GUI tests that do not start at Google.
    *
-   * Useful for independent homepage and career tests.
-   *
-   * @param url Expected homepage URL.
+   * @param url Expected absolute homepage URL.
    */
   async open(url: string): Promise<void> {
-
-    console.log(`[MoroSystems] Opening homepage: ${url}`);
-
     await this.openPage(url);
-
     await this.acceptCookiesIfPresent();
-
     await this.verifyHomepage(url);
   }
 
   /**
-   * Handles the optional cookie consent dialog.
+   * Rejects optional cookies when the consent dialog appears.
    *
-   * Selects "Necessary cookies only".
-   * The locator uses the existing element ID.
+   * The consent banner may load after the initial document. Wait up to three
+   * seconds for its button; only a timeout means the dialog is absent.
+   * Other errors are rethrown so genuine problems do not go unnoticed.
    */
   async acceptCookiesIfPresent(): Promise<void> {
+    const necessaryCookiesButton = this.page.locator('#cookiescript_reject');
 
-    const necessaryCookiesButton = this.page.locator(
-      '#cookiescript_reject'
-    );
-
-    const isVisible = await necessaryCookiesButton
-      .waitFor({
+    try {
+      await necessaryCookiesButton.waitFor({
         state: 'visible',
-        timeout: 3000,
-      })
-      .then(() => true)
-      .catch(() => false);
+        timeout: 3_000,
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== 'TimeoutError') {
+        throw error;
+      }
 
-    if (!isVisible) {
-      console.log(
-        '[MoroSystems] Cookie dialog not displayed.'
-      );
+      console.log('[MoroSystems] Cookie dialog not displayed.');
       return;
     }
 
-    console.log(
-      '[MoroSystems] Cookie dialog detected.'
-    );
+    console.log('[MoroSystems] Cookie dialog detected.');
 
     await necessaryCookiesButton.click();
-
     await expect(necessaryCookiesButton).toBeHidden();
 
-    console.log(
-      '[MoroSystems] Necessary cookies selected.'
-    );
+    console.log('[MoroSystems] Necessary cookies selected.');
   }
 
   /**
-   * Navigates to the homepage through a website link.
+   * Verifies the exact homepage URL and confirms the MoroSystems page title.
+   * This intentionally rejects a Careers page or another subpage.
    *
-   * Unlike openPage(), this method does not navigate
-   * directly using page.goto().
-   *
-   * @param expectedUrl Exact homepage URL.
+   * @param expectedUrl Exact homepage URL supplied by the test.
    */
-  async navigateToHomepage(
-    expectedUrl: string
-  ): Promise<void> {
-
-    console.log(
-      '[MoroSystems] Navigating to homepage via website link.'
-    );
-
-    // The page may already be the homepage.
-    if (this.page.url() === expectedUrl) {
-      console.log(
-        '[MoroSystems] Already on the expected homepage.'
-      );
-      return;
-    }
-
-    // Prefer an existing link whose destination is
-    // the homepage root, rather than navigating directly.
-    const homepageLink = this.page
-      .locator('a[href="/"]')
-      .filter({ visible: true })
-      .first();
-
-    await expect(
-      homepageLink,
-      'A visible homepage navigation link must exist.'
-    ).toBeVisible();
-
-    await homepageLink.click();
-
-    await this.verifyHomepage(expectedUrl);
-
-    console.log(
-      '[MoroSystems] Homepage opened via website navigation.'
-    );
-  }
-
-  /**
-   * Verifies the exact homepage URL and page title.
-   *
-   * Unlike the previous implementation, a Careers
-   * subpage will NOT pass this verification.
-   *
-   * @param expectedUrl Exact homepage URL.
-   */
-  async verifyHomepage(
-    expectedUrl: string
-  ): Promise<void> {
-
+  async verifyHomepage(expectedUrl: string): Promise<void> {
     await this.verifyUrl(expectedUrl);
-
     await this.verifyTitle(/MoroSystems/i);
 
-    console.log(
-      `[MoroSystems] Homepage verified: ${this.page.url()}`
-    );
+    console.log('[MoroSystems] Homepage verified.');
   }
 
   /**
-   * Navigates to Careers through the website menu.
+   * Opens Careers by clicking a visible link on the MoroSystems website.
+   * Verifies the destination and handles a cookie dialog if one appears.
    *
-   * @param expectedUrl Exact Careers page URL.
+   * @param expectedUrl Exact Careers page URL supplied by the test.
    */
-  async openCareers(
-    expectedUrl: string
-  ): Promise<void> {
+  async openCareers(expectedUrl: string): Promise<void> {
+    console.log('[MoroSystems] Opening Careers via navigation menu.');
 
-    console.log(
-      '[MoroSystems] Opening Careers via navigation menu.'
-    );
-
-    // Keep the previously verified locator.
     const careersLink = this.page
       .locator('a[href*="/kariera/"]')
       .filter({ visible: true })
       .first();
 
-    await expect(careersLink).toBeVisible();
+    await expect(
+      careersLink,
+      'A visible Careers navigation link must exist.'
+    ).toBeVisible();
 
-    // Use actual website navigation.
     await careersLink.click();
-
-    // Validate the destination supplied by the test.
     await this.verifyUrl(expectedUrl);
-
     await this.acceptCookiesIfPresent();
 
-    console.log(
-      '[MoroSystems] Careers page opened via menu.'
-    );
+    console.log('[MoroSystems] Careers page opened via menu.');
   }
 }

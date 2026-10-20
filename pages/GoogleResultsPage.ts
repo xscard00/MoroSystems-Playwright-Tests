@@ -1,264 +1,159 @@
-
-import {
-  expect,
-  type Locator,
-  type Page,
-} from '@playwright/test';
-
+import { expect, type Locator } from '@playwright/test';
 import { BasePage } from './BasePage';
 
 /**
- * Page Object for Google Search results.
+ * Page Object for Google search results.
  *
- * Responsibilities:
- * - Handle manual CAPTCHA verification.
- * - Wait for Google Search results.
- * - Find a search result by its heading.
- * - Verify a result is visible.
- * - Click a result and validate its final URL.
+ * Locates results by their visible heading, supports manual CAPTCHA
+ * verification and checks the destination after clicking a result.
  *
- * The class does not depend on a specific company.
+ * The expected heading and destination URL are supplied by the test.
  */
 export class GoogleResultsPage extends BasePage {
-
-  constructor(page: Page) {
-    super(page);
-  }
-
   /**
-   * Detects known Google CAPTCHA / bot protection URLs.
-   *
-   * CAPTCHA is never bypassed automatically.
+   * Detects Google's known CAPTCHA and anti-bot URL paths.
+   * This check does not attempt to bypass the challenge.
    */
   private isCaptchaDisplayed(): boolean {
     return /\/sorry\/|\/recaptcha\//i.test(this.page.url());
   }
 
   /**
- * Returns clickable Google search results.
- *
- * Supports:
- * - Standard results containing an H3 heading.
- * - Sponsored results containing role="heading".
- */
-private getResultLinks(): Locator {
-
-  return this.page.locator(
-    'a:has(h3), a:has([role="heading"])'
-  );
-}
-
-/**
- * Finds a visible Google search result
- * by its heading text.
- *
- * Supports exact text or a regular expression.
- *
- * @param expectedTitle - Result heading or pattern.
- */
-private async findResult(
-  expectedTitle: string | RegExp
-): Promise<Locator | null> {
-
-  const links = this.getResultLinks();
-  const count = await links.count();
-
-  for (let index = 0; index < count; index++) {
-
-    const link = links.nth(index);
-
-    if (!(await link.isVisible())) {
-      continue;
-    }
-
-    const heading = link.locator(
-      'h3, [role="heading"]'
-    ).first();
-
-    if (!(await heading.isVisible())) {
-      continue;
-    }
-
-    const actualTitle =
-      (await heading.textContent())?.trim() ?? '';
-
-    const matches =
-      typeof expectedTitle === 'string'
-        ? actualTitle === expectedTitle
-        : expectedTitle.test(actualTitle);
-
-    if (!matches) {
-      continue;
-    }
-
-    console.log(
-      `[Google] Matching result found: ${actualTitle}`
-    );
-
-    return link;
+   * Returns links containing a standard or sponsored-result heading.
+   * Google's markup can differ between these result types.
+   */
+  private getResultLinks(): Locator {
+    return this.page.locator('a:has(h3), a:has([role="heading"])');
   }
 
-  return null;
-}
-
   /**
-   * Prints search result headings and URLs
-   * when additional diagnostics are needed.
+   * Finds the first visible result whose heading matches the supplied text.
+   * Strings require an exact match; RegExp values allow flexible matching.
+   *
+   * @param title Expected search-result heading or pattern.
+   * @returns Matching link, or null when no visible result matches.
    */
-  private async logSearchResults(): Promise<void> {
-
-    console.log(
-      `[Google DEBUG] Current URL: ${this.page.url()}`
-    );
-
-    console.log(
-      `[Google DEBUG] Page title: ${await this.page.title()}`
-    );
-
+  private async findResult(title: string | RegExp): Promise<Locator | null> {
     const links = this.getResultLinks();
     const count = await links.count();
 
-    console.log(
-      `[Google DEBUG] Search result candidates: ${count}`
-    );
+    for (let index = 0; index < count; index++) {
+      const link = links.nth(index);
+      if (!(await link.isVisible())) continue;
+
+      const heading = link.locator('h3, [role="heading"]').first();
+      if (!(await heading.isVisible())) continue;
+
+      const actualTitle = (await heading.textContent())?.trim() ?? '';
+      const matches = typeof title === 'string'
+        ? actualTitle === title
+        : title.test(actualTitle);
+
+      if (matches) {
+        console.log(`[Google] Matching result found: ${actualTitle}`);
+        return link;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Logs up to ten result headings and destinations after a failed search.
+   * Handles both heading variants without waiting for a missing h3 element.
+   */
+  private async logSearchResults(): Promise<void> {
+    console.log(`[Google DEBUG] Current URL: ${this.page.url()}`);
+    console.log(`[Google DEBUG] Page title: ${await this.page.title()}`);
+
+    const links = this.getResultLinks();
+    const count = await links.count();
+    console.log(`[Google DEBUG] Search result candidates: ${count}`);
 
     for (let index = 0; index < Math.min(count, 10); index++) {
-
       const link = links.nth(index);
+      const heading = link.locator('h3, [role="heading"]').first();
+      const title = (await heading.count()) > 0
+        ? (await heading.textContent())?.trim() ?? '(empty heading)'
+        : '(heading unavailable)';
 
-      const href = await link.getAttribute('href');
+      const href = (await link.getAttribute('href')) ?? '(no href)';
+      const shortHref = href.length > 160 ? `${href.slice(0, 160)}...` : href;
 
-      const title = (
-        await link.locator('h3').first().textContent()
-      )?.trim();
-
-      console.log(
-        `[Google DEBUG] ${index + 1}: ${title} -> ${href}`
-      );
+      console.log(`[Google DEBUG] ${index + 1}: ${title} -> ${shortHref}`);
     }
   }
 
   /**
-   * Waits for the requested Google result.
+   * Waits for a matching search result to appear.
    *
-   * When MANUAL_CAPTCHA=true, Playwright Inspector
-   * pauses execution for manual verification.
+   * MANUAL_CAPTCHA=true pauses in Playwright Inspector, allowing the user
+   * to complete Google's verification and then resume the test manually.
    *
-   * @param title Expected Google result heading.
+   * @param title Expected result heading or pattern.
    */
-  async waitForResults(title: string): Promise<void> {
-
+  async waitForResults(title: string | RegExp): Promise<void> {
     if (process.env.MANUAL_CAPTCHA === 'true') {
-
+      console.log('[Google] Manual verification mode enabled.');
       console.log(
-        '[Google] Manual verification mode enabled.'
+        '[Google] Complete CAPTCHA if necessary, then resume in Playwright Inspector.'
       );
-
-      console.log(
-        '[Google] Complete CAPTCHA if necessary, ' +
-        'then resume the test in Playwright Inspector.'
-      );
-
       await this.page.pause();
     }
 
     try {
-
       await expect.poll(async () => {
-
-        if (this.isCaptchaDisplayed()) {
-          return 'captcha';
-        }
-
-        const result = await this.findResult(title);
-
-        if (result) {
-          return 'results';
-        }
-
-        return 'loading';
-
+        if (this.isCaptchaDisplayed()) return 'captcha';
+        return (await this.findResult(title)) ? 'results' : 'loading';
       }, {
-        timeout: 15000,
+        timeout: 15_000,
         message: `Waiting for Google result: ${title}`,
       }).toBe('results');
-
     } catch (error) {
-
-      // Log the page state when the result is unavailable.
       await this.logSearchResults();
 
       if (this.isCaptchaDisplayed()) {
         throw new Error(
-          'Google CAPTCHA detected. ' +
-          'Manual verification is required to continue.'
+          'Google CAPTCHA detected. Manual verification is required to continue.'
         );
       }
 
       throw error;
     }
 
-    console.log(
-      `[Google] Search result available: ${title}`
-    );
+    console.log(`[Google] Search result available: ${title}`);
   }
 
   /**
-   * Verifies that a Google result with the
-   * requested heading is visible.
+   * Verifies that a visible Google result has the expected heading.
    *
-   * @param title Expected result heading.
+   * @param title Expected result heading or pattern.
    */
-  async verifyResult(title: string): Promise<void> {
-
+  async verifyResult(title: string | RegExp): Promise<void> {
     const result = await this.findResult(title);
+    if (!result) throw new Error(`Google result not found: ${title}`);
 
-    expect(
-      result,
-      `Google must display search result: ${title}`
-    ).not.toBeNull();
-
-    await expect(result!).toBeVisible();
-
-    console.log(
-      `[Google] Search result verified: ${title}`
-    );
+    await expect(result).toBeVisible();
+    console.log(`[Google] Search result verified: ${title}`);
   }
 
-  
-/**
- * Opens a selected Google search result.
- *
- * Validates the destination URL while ignoring
- * tracking parameters added by search engines.
- *
- * @param title Search result heading or pattern.
- * @param expectedUrl Expected destination URL.
- */
-async openResult(
-  title: string | RegExp,
-  expectedUrl: string
-): Promise<void> {
+  /**
+   * Clicks the selected search result and verifies its destination.
+   * Tracking parameters are ignored, but origin and pathname must match.
+   *
+   * @param title Expected result heading or pattern.
+   * @param expectedUrl Expected destination URL without tracking parameters.
+   */
+  async openResult(title: string | RegExp, expectedUrl: string): Promise<void> {
+    const result = await this.findResult(title);
+    if (!result) throw new Error(`Google result not found: ${title}`);
 
-  const result = await this.findResult(title);
+    await result.click();
+    await this.verifyUrlWithoutParams(expectedUrl);
 
-  expect(
-    result,
-    `Search result must exist before clicking: ${title}`
-  ).not.toBeNull();
-
-  await result!.click();
-
-  // Google Ads may append UTM and click-tracking parameters.
-  await this.verifyUrlWithoutParams(expectedUrl);
-
-
-const currentUrl = new URL(this.page.url());
-
-console.log(
-  `[Google] Opened search result: ` +
-  `${currentUrl.origin}${currentUrl.pathname}`
-);
-}
-
+    const currentUrl = new URL(this.page.url());
+    console.log(
+      `[Google] Opened search result: ${currentUrl.origin}${currentUrl.pathname}`
+    );
+  }
 }

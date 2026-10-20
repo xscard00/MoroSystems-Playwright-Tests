@@ -1,29 +1,31 @@
-
 name: MoroSystems QA Automation
 
-on:
+# Run on changes to the main branch, pull requests and manual requests.
+'on':
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
 
-jobs:
+# The workflow only needs to read the test repository.
+permissions:
+  contents: read
 
-  # ==========================================
-  # API TESTS
-  # ==========================================
+jobs:
   api-tests:
     name: API - Todo Backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
       - name: Checkout test repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -34,57 +36,53 @@ jobs:
       - name: Validate TypeScript
         run: npx tsc --noEmit
 
-      - name: Clone MoroSystems Todo backend
-        run: |
-          git clone https://github.com/morosystems/todo-be.git todo-be
+      # The assignment requires running the official backend locally.
+      - name: Clone Todo backend
+        run: git clone https://github.com/morosystems/todo-be.git todo-be
 
       - name: Install backend dependencies
         working-directory: ./todo-be
         run: npm install
 
-      - name: Start backend and wait for readiness
+      - name: Start backend and check readiness
         run: |
           cd todo-be
           nohup npm start > ../todo-backend.log 2>&1 &
           cd ..
 
-          echo "Waiting for Todo API..."
-
           for attempt in $(seq 1 20); do
-            if curl --silent --show-error --fail \
-              --max-time 8 \
-              http://localhost:8080/tasks > /dev/null 2>&1; then
-
-              echo "Todo API is ready."
+            if curl --silent --fail --max-time 8 \
+              http://localhost:8080/tasks > /dev/null; then
+              echo 'Todo API is ready.'
               exit 0
             fi
 
-            echo "Backend not ready, attempt $attempt/20."
+            echo "Waiting for Todo API ($attempt/20)..."
             sleep 3
           done
 
-          echo "Todo backend failed to start."
+          echo 'Todo API failed to start. Backend log:'
           cat todo-backend.log
           exit 1
 
+      # Each API test creates unique task data and cleans it up afterwards.
       - name: Run API tests
         env:
           TODO_API_URL: http://localhost:8080
-        run: |
-          npx playwright test --project=api --workers=1
+        run: npx playwright test --project=api --workers=2
 
       - name: Upload API HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-playwright-report
           path: playwright-report/
           retention-days: 30
           if-no-files-found: ignore
 
-      - name: Upload API diagnostic files
+      - name: Upload API diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-diagnostics
           path: |
@@ -93,20 +91,19 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # ==========================================
-  # GUI CROSS-BROWSER TESTS
-  # ==========================================
   gui-tests:
     name: GUI - Cross Browser
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
       - name: Checkout test repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -120,27 +117,30 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
 
-      - name: Run GUI tests without manual CAPTCHA
+      # Exclude Google (manual CAPTCHA) and visual snapshots (Windows baselines).
+      # Functional Careers and responsive tests run across all three engines.
+      # Visual regression is run locally on Windows, documented in README.
+      - name: Run GUI functional and responsive tests
         run: |
           npx playwright test \
             --project=chromium \
             --project=firefox \
             --project=webkit \
-            --grep-invert "@manual-captcha" \
-            --workers=1
+            --grep-invert '@manual-captcha|@visual' \
+            --workers=2
 
       - name: Upload GUI HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gui-playwright-report
           path: playwright-report/
           retention-days: 30
           if-no-files-found: ignore
 
-      - name: Upload GUI diagnostic files
+      - name: Upload GUI diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gui-diagnostics
           path: test-results/

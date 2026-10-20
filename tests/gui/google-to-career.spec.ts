@@ -1,4 +1,3 @@
-
 import { test } from '@playwright/test';
 
 import { GoogleSearchPage } from '../../pages/GoogleSearchPage';
@@ -7,51 +6,30 @@ import { MoroSystemsHomePage } from '../../pages/MoroSystemsHomePage';
 import { MoroSystemsCareerPage } from '../../pages/MoroSystemsCareerPage';
 
 /**
- * TC-GUI-001: Google Search to MoroSystems Careers
+ * TC-GUI-001: Google search to MoroSystems Careers.
  *
- * Test objective:
- * 1. Open Google and search for MoroSystems.
- * 2. Find the official MoroSystems website result.
- * 3. Click the result and open the company homepage.
- * 4. Verify the exact homepage URL and page title.
- * 5. Navigate to Careers through the website menu.
- * 6. Filter available positions by city.
- * 7. Verify the filtered job positions.
+ * Covers the GUI assignment from submitting a Google query to validating
+ * the city-filtered job list on the official MoroSystems website.
  *
- * Known limitation:
- * Google may require manual CAPTCHA verification.
- * Set MANUAL_CAPTCHA=true for interactive execution.
+ * Google may require manual CAPTCHA verification. The @manual-captcha tag
+ * excludes this scenario from unattended CI runs. For assisted local runs,
+ * set MANUAL_CAPTCHA=true and resume execution in Playwright Inspector.
  */
 
-// TEST DATA
-
+// Test data is kept outside Page Objects to separate scenarios from UI logic.
 const googleUrl = 'https://www.google.com/?hl=en';
-
 const searchText = 'MoroSystems';
-
-// Search result heading shown by Google.
 const searchResultTitle = 'MoroSystems.cz';
-
-// Official website information from the assignment.
 const expectedHomeUrl = 'https://www.morosystems.cz/';
-
 const expectedPageTitle =
   'MoroSystems - smysluplná IT řešení a technologické inovace';
-
 const careersUrl = 'https://www.morosystems.cz/kariera/';
-
 const city = 'Brno';
 
-// TEST SCENARIO
+test('TC-GUI-001: Google to MoroSystems Careers @manual-captcha', async ({ page }) => {
+  // Allow extra time only when the scenario requires human interaction.
+  test.setTimeout(process.env.MANUAL_CAPTCHA === 'true' ? 5 * 60_000 : 60_000);
 
-test('TC-GUI-001: Google to MoroSystems Careers @manual-captcha', async ({
-  page,
-}) => {
-
-  // Allow time for manual Google CAPTCHA verification.
-  test.setTimeout(5 * 60 * 1000);
-
-  // Initialize Page Objects.
   const googleSearch = new GoogleSearchPage(page);
   const googleResults = new GoogleResultsPage(page);
   const moroHome = new MoroSystemsHomePage(page);
@@ -78,36 +56,28 @@ test('TC-GUI-001: Google to MoroSystems Careers @manual-captcha', async ({
   });
 
   await test.step('06 - Open official MoroSystems homepage', async () => {
-    await googleResults.openResult(
-      searchResultTitle,
-      expectedHomeUrl
-    );
+    // openResult() verifies the exact origin and path, ignoring tracking params.
+    await googleResults.openResult(searchResultTitle, expectedHomeUrl);
   });
 
-await test.step('07 - Verify official homepage', async () => {
+  await test.step('07 - Verify official homepage title', async () => {
+    // Match the page title stated explicitly in the assignment.
+    await moroHome.verifyTitle(expectedPageTitle);
+  });
 
-  // Ignore tracking parameters added by Google Ads.
-  await moroHome.verifyUrlWithoutParams(expectedHomeUrl);
+  await test.step('08 - Navigate to Careers via menu', async () => {
+    await moroHome.openCareers(careersUrl);
+  });
 
-  // Verify the exact page title from the assignment.
-  await moroHome.verifyTitle(expectedPageTitle);
+  await test.step('09 - Verify Careers page', async () => {
+    await careers.verifyPage(careersUrl);
+  });
 
-});
+  await test.step(`10 - Filter positions by ${city}`, async () => {
+    await careers.filterByCity(city);
+  });
 
-await test.step('08 - Navigate to Careers via menu', async () => {
-  await moroHome.openCareers(careersUrl);
-});
-
-await test.step('09 - Verify Careers page', async () => {
-  await careers.verifyPage(careersUrl);
-});
-
-await test.step(`10 - Filter positions by ${city}`, async () => {
-  await careers.filterByCity(city);
-});
-
-await test.step(`11 - Verify filtered positions for ${city}`, async () => {
-  await careers.verifyFilteredPositions(city);
-});
-
+  await test.step(`11 - Verify filtered positions for ${city}`, async () => {
+    await careers.verifyFilteredPositions(city);
+  });
 });

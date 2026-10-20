@@ -1,195 +1,124 @@
-
-import { expect, type Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { BasePage } from './BasePage';
 
 /**
  * Page Object for the MoroSystems Careers page.
  *
- * Responsibilities:
- * - Verify that the Careers page is displayed.
- * - Interact with the city filter.
- * - Validate filtered job positions.
- *
- * All expected values are supplied by the test.
- * Common browser operations are inherited from BasePage.
+ * Provides city filtering and verifies which job positions are shown.
+ * Expected URLs and city names are supplied by the test, not hard-coded here.
  */
 export class MoroSystemsCareerPage extends BasePage {
-
-  constructor(page: Page) {
-    super(page);
-  }
-
   /**
-   * Verifies the exact Careers page URL
-   * and checks that the jobs section is visible.
+   * Confirms that the browser is on the Careers page and its jobs section
+   * is displayed.
    *
-   * @param expectedUrl Expected Careers page URL.
+   * @param expectedUrl Exact Careers page URL.
    */
   async verifyPage(expectedUrl: string): Promise<void> {
-
-    // STEP 1: Verify the exact URL.
     await this.verifyUrl(expectedUrl);
-
-    // STEP 2: Verify that the job section is displayed.
     await expect(
-      this.page.getByRole('heading', {
-        name: 'Koho hledáme',
-      })
+      this.page.getByRole('heading', { name: 'Koho hledáme' })
     ).toBeVisible();
 
     console.log('[Careers] Careers page verified.');
   }
 
   /**
-   * Selects a city using the custom dropdown.
+   * Opens the custom city dropdown and selects the requested city.
    *
-   * The site uses labels with data-filter attributes.
+   * The site uses a custom selector rather than a native <select> element.
+   * The option text is matched exactly to prevent partial city-name matches.
    *
-   * @param city City selected by the test.
+   * @param city City to select (for example, "Brno").
    */
   async filterByCity(city: string): Promise<void> {
-
     console.log(`[Careers] Selecting city: ${city}`);
 
-    // STEP 1: Find the custom city filter.
-    const cityFilter = this.page.locator(
-      '.inp-custom-select'
-    );
-
+    const cityFilter = this.page.locator('.inp-custom-select');
     await expect(cityFilter).toBeVisible();
 
-    // STEP 2: Open the dropdown.
-    const dropdownTrigger = cityFilter.locator(
-      '.inp-custom-select__select'
-    );
-
-    await dropdownTrigger.click();
-
+    await cityFilter.locator('.inp-custom-select__select').click();
     console.log('[Careers] City dropdown opened.');
 
-    // STEP 3: Find the requested city.
-    const cityOption = cityFilter.locator(
-      'label[data-filter]'
-    ).filter({
-      hasText: new RegExp(
-        `^\\s*${city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`,
-        'i'
-      ),
+    // Escape regex metacharacters in city names before matching option text.
+    const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const cityOption = cityFilter.locator('label[data-filter]').filter({
+      hasText: new RegExp(`^\\s*${escapedCity}\\s*$`, 'i'),
     });
 
     await expect(cityOption).toBeVisible();
-
-    // STEP 4: Select the requested city.
     await cityOption.click();
 
-    // STEP 5: Verify the selected city is displayed.
-    const selectedCity = cityFilter.locator(
-      '.inp-custom-select__select-wrap'
-    );
+    // Verify that the selection is reflected in the custom dropdown.
+    await expect(
+      cityFilter.locator('.inp-custom-select__select-wrap')
+    ).toContainText(city);
 
-    await expect(selectedCity).toContainText(city);
-
-    console.log(
-      `[Careers] City filter confirmed: ${city}`
-    );
+    console.log(`[Careers] City filter confirmed: ${city}`);
   }
 
   /**
-   * Verifies all job positions after applying a city filter.
+   * Checks the selected city and every job in the filtered list.
    *
-   * Validation:
-   * 1. The dropdown displays the selected city.
-   * 2. Job positions exist on the page.
-   * 3. Matching positions are visible.
-   * 4. Non-matching positions are hidden.
-   * 5. At least one matching position exists.
+   * A job matches when its comma-separated data-filter attribute contains
+   * the selected city. Matching jobs must be visible; other jobs must be
+   * hidden. At least one matching job is required for this test scenario.
    *
-   * @param city Selected city.
+   * @param city City previously selected with filterByCity().
    */
   async verifyFilteredPositions(city: string): Promise<void> {
+    console.log(`[Careers] Verifying positions for: ${city}`);
 
-    console.log(
-      `[Careers] Verifying positions for: ${city}`
-    );
+    await expect(
+      this.page.locator('.inp-custom-select__select-wrap')
+    ).toContainText(city);
 
-    // STEP 1: Verify selected city.
-    const selectedCity = this.page.locator(
-      '.inp-custom-select__select-wrap'
-    );
+    const positions = this.page.locator('.c-positions li[data-filter]');
 
-    await expect(selectedCity).toContainText(city);
-
-    // STEP 2: Locate job position elements.
-    const positions = this.page.locator(
-      '.c-positions li[data-filter]'
-    );
+    // Auto-wait for the first job instead of failing on a transient empty list.
+    await expect(
+      positions.first(),
+      'The Careers page must contain job positions.'
+    ).toBeAttached();
 
     const totalCount = await positions.count();
-
-    expect(
-      totalCount,
-      'The Careers page must contain job positions.'
-    ).toBeGreaterThan(0);
-
     let matchingCount = 0;
     let hiddenCount = 0;
 
-    // STEP 3: Validate every job position.
     for (let index = 0; index < totalCount; index++) {
-
       const position = positions.nth(index);
-
-      const filterAttribute = await position.getAttribute(
-        'data-filter'
-      );
+      const filterAttribute = await position.getAttribute('data-filter');
 
       expect(
         filterAttribute,
         `Position ${index + 1} must have a data-filter attribute.`
       ).not.toBeNull();
 
-      // Example: "Brno, Hradec Králové"
+      // Example attribute: "Brno, Hradec Králové".
       const supportedCities = (filterAttribute ?? '')
         .split(',')
         .map(value => value.trim());
 
       const matchesCity = supportedCities.includes(city);
+      const jobLink = position.locator('a.c-positions__link');
 
       if (matchesCity) {
-
-        // Matching positions must be visible.
-        await expect(position).not.toHaveClass(
-          /\bis-hidden\b/
-        );
-
-        await expect(
-          position.locator('a.c-positions__link')
-        ).toBeVisible();
-
+        await expect(position).not.toHaveClass(/\bis-hidden\b/);
+        await expect(jobLink).toBeVisible();
         matchingCount++;
-
-        console.log(
-          `[Careers] Position ${index + 1}: ` +
-          `${filterAttribute} -> VISIBLE (PASS)`
-        );
-
       } else {
-
-        // Other positions must be hidden.
-        await expect(position).toHaveClass(
-          /\bis-hidden\b/
-        );
-
+        await expect(position).toHaveClass(/\bis-hidden\b/);
+        await expect(jobLink).toBeHidden();
         hiddenCount++;
-
-        console.log(
-          `[Careers] Position ${index + 1}: ` +
-          `${filterAttribute} -> HIDDEN (PASS)`
-        );
       }
+
+      console.log(
+        `[Careers] Position ${index + 1}: ${filterAttribute} -> ` +
+        `${matchesCity ? 'VISIBLE' : 'HIDDEN'} (PASS)`
+      );
     }
 
-    // STEP 4: Prevent passing without matching jobs.
+    // Prevent a false-positive result when no job belongs to the chosen city.
     expect(
       matchingCount,
       `Expected at least one position for ${city}.`
@@ -197,8 +126,7 @@ export class MoroSystemsCareerPage extends BasePage {
 
     console.log(
       `[Careers] Filter validated. ` +
-      `Matching positions: ${matchingCount}, ` +
-      `Hidden positions: ${hiddenCount}.`
+      `Matching positions: ${matchingCount}, hidden positions: ${hiddenCount}.`
     );
   }
 }

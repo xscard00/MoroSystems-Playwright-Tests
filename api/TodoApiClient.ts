@@ -1,132 +1,103 @@
-
-import type {
-  APIRequestContext,
-  APIResponse,
-} from '@playwright/test';
-
-import type {
-  CreateTaskRequest,
-  UpdateTaskRequest,
-} from './TodoTypes';
+import type { APIRequestContext, APIResponse } from '@playwright/test';
+import type { CreateTaskRequest, UpdateTaskRequest } from './TodoTypes';
 
 /**
- * HTTP client for MoroSystems Todo API.
+ * Provides HTTP operations for the MoroSystems Todo API (OpenAPI v1.1.0).
  *
- * Encapsulates API endpoints and request payloads.
- * Response validation is handled by the test layer.
+ * The client only builds and sends requests. Tests remain responsible for
+ * checking HTTP statuses, response bodies and business rules.
  *
- * Based on OpenAPI specification version 1.1.0.
+ * When baseUrl is omitted, Playwright resolves relative paths using the
+ * baseURL configured for the API project in playwright.config.ts.
  */
 export class TodoApiClient {
-
+  /**
+   * @param request Playwright API request context.
+   * @param baseUrl Optional API origin; retained for existing test callers.
+   */
   constructor(
     private readonly request: APIRequestContext,
-    private readonly baseUrl: string = 'http://localhost:8080'
+    private readonly baseUrl?: string
   ) {}
 
   /**
-   * Builds an absolute API URL.
+   * Resolves an API path against an optional explicit base URL.
+   * Otherwise returns the relative path for Playwright to resolve.
+   *
+   * @param path API path beginning with a slash.
    */
   private endpoint(path: string): string {
-    return `${this.baseUrl.replace(/\/$/, '')}${path}`;
+    return this.baseUrl ? new URL(path, this.baseUrl).toString() : path;
   }
 
   /**
-   * GET /tasks
+   * Builds an endpoint for a specific task, encoding its ID safely.
    *
-   * Retrieves all tasks.
+   * @param id Task identifier returned by the API.
    */
+  private taskPath(id: string): string {
+    return `/tasks/${encodeURIComponent(id)}`;
+  }
+
+  /** Retrieves all tasks (GET /tasks). */
   async getTasks(): Promise<APIResponse> {
-
-    return this.request.get(
-      this.endpoint('/tasks')
-    );
+    return this.request.get(this.endpoint('/tasks'));
   }
 
   /**
-   * POST /tasks
+   * Creates a new task (POST /tasks).
    *
-   * Creates a task with the specified text.
+   * @param payload Task text submitted to the API.
    */
-  async createTask(
-    payload: CreateTaskRequest
-  ): Promise<APIResponse> {
-
-    return this.request.post(
-      this.endpoint('/tasks'),
-      { data: payload }
-    );
+  async createTask(payload: CreateTaskRequest): Promise<APIResponse> {
+    return this.request.post(this.endpoint('/tasks'), { data: payload });
   }
 
   /**
-   * POST /tasks/{id}
+   * Updates an existing task (POST /tasks/{id}).
+   * The actual backend uses POST although the assignment requests PUT.
    *
-   * Updates the text of an existing task.
-   *
-   * NOTE:
-   * The backend specification defines POST,
-   * even though the original assignment mentions PUT.
+   * @param id Identifier of the task to update.
+   * @param payload New task text.
    */
   async updateTask(
     id: string,
     payload: UpdateTaskRequest
   ): Promise<APIResponse> {
-
-    return this.request.post(
-      this.endpoint(`/tasks/${encodeURIComponent(id)}`),
-      { data: payload }
-    );
+    return this.request.post(this.endpoint(this.taskPath(id)), {
+      data: payload,
+    });
   }
 
   /**
-   * DELETE /tasks/{id}
+   * Deletes a task (DELETE /tasks/{id}).
    *
-   * Deletes a task by its ID.
+   * @param id Identifier of the task to delete.
    */
   async deleteTask(id: string): Promise<APIResponse> {
-
-    return this.request.delete(
-      this.endpoint(`/tasks/${encodeURIComponent(id)}`)
-    );
+    return this.request.delete(this.endpoint(this.taskPath(id)));
   }
 
-  /**
-   * GET /tasks/completed
-   *
-   * Retrieves all completed tasks.
-   */
+  /** Retrieves completed tasks (GET /tasks/completed). */
   async getCompletedTasks(): Promise<APIResponse> {
-
-    return this.request.get(
-      this.endpoint('/tasks/completed')
-    );
+    return this.request.get(this.endpoint('/tasks/completed'));
   }
 
   /**
-   * POST /tasks/{id}/complete
+   * Marks a task as completed (POST /tasks/{id}/complete).
    *
-   * Marks a task as completed.
+   * @param id Identifier of the task to complete.
    */
   async completeTask(id: string): Promise<APIResponse> {
-
-    return this.request.post(
-      this.endpoint(
-        `/tasks/${encodeURIComponent(id)}/complete`
-      )
-    );
+    return this.request.post(this.endpoint(`${this.taskPath(id)}/complete`));
   }
 
   /**
-   * POST /tasks/{id}/incomplete
+   * Marks a task as incomplete (POST /tasks/{id}/incomplete).
    *
-   * Marks a task as incomplete.
+   * @param id Identifier of the task to reopen.
    */
   async markTaskIncomplete(id: string): Promise<APIResponse> {
-
-    return this.request.post(
-      this.endpoint(
-        `/tasks/${encodeURIComponent(id)}/incomplete`
-      )
-    );
+    return this.request.post(this.endpoint(`${this.taskPath(id)}/incomplete`));
   }
 }

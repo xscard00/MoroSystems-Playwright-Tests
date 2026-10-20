@@ -1,111 +1,77 @@
-
-import {
-  expect,
-  type Page,
-} from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
- * Base class for all Page Objects.
+ * Provides browser operations shared by all Page Objects.
  *
- * Contains reusable browser operations that are
- * independent of a specific website.
+ * Page Objects inherit these helpers instead of duplicating navigation,
+ * URL assertions or page-title assertions.
  */
 export class BasePage {
-
   constructor(protected readonly page: Page) {}
 
   /**
-   * Opens a website using the URL supplied by the test.
+   * Opens an absolute URL provided by the test.
    *
-   * @param url - Absolute URL of the requested page.
+   * Waiting for DOMContentLoaded avoids depending on third-party resources
+   * while subsequent assertions verify that the expected page is ready.
+   *
+   * @param url Absolute URL to open.
    */
   async openPage(url: string): Promise<void> {
-
     console.log(`[Browser] Opening page: ${url}`);
 
-    await this.page.goto(url, {
-      waitUntil: 'domcontentloaded',
-    });
+    await this.page.goto(url, { waitUntil: 'domcontentloaded' });
 
     console.log(`[Browser] Current URL: ${this.page.url()}`);
   }
 
   /**
-   * Verifies that the browser is displaying
-   * the exact URL supplied by the test.
+   * Checks the entire URL, including the query string and fragment.
+   * Use this for navigation where an exact destination is required.
    *
-   * Checks protocol, hostname, path and query string.
-   *
-   * @param expectedUrl - Expected absolute URL.
+   * @param expectedUrl Expected absolute URL.
    */
   async verifyUrl(expectedUrl: string): Promise<void> {
-
     await expect(
       this.page,
-      `Expected URL: ${expectedUrl}`
+      `Expected exact URL: ${expectedUrl}`
     ).toHaveURL(expectedUrl);
 
     console.log(`[Browser] Verified URL: ${this.page.url()}`);
   }
 
   /**
-   * Verifies the browser page title.
+   * Checks the URL origin and pathname, ignoring query parameters and hash.
+   * This is useful when an external link adds UTM or Google Ads parameters.
+   * It still rejects a different protocol, hostname, port or page path.
    *
-   * A regular expression allows flexible matching.
-   *
-   * @param expectedTitle - Expected title or pattern.
+   * @param expectedUrl Expected absolute URL without required query parameters.
    */
-  async verifyTitle(
-    expectedTitle: string | RegExp
-  ): Promise<void> {
+  async verifyUrlWithoutParams(expectedUrl: string): Promise<void> {
+    const expected = new URL(expectedUrl);
 
-    await expect(this.page).toHaveTitle(expectedTitle);
-
-    console.log(
-      `[Browser] Verified page title: ${await this.page.title()}`
-    );
-  }
-
-
-/**
- * Verifies the page URL without query parameters
- * and URL fragments.
- *
- * Compares:
- * - Protocol
- * - Hostname
- * - Port
- * - Pathname
- *
- * Useful when external websites append tracking
- * parameters such as UTM or Google Ads identifiers.
- *
- * @param expectedUrl Expected page URL.
- */
-async verifyUrlWithoutParams(
-  expectedUrl: string
-): Promise<void> {
-
-  const expected = new URL(expectedUrl);
-
-  await expect(
-    this.page,
-    `Expected page URL without query parameters: ${expectedUrl}`
-  ).toHaveURL(actual => {
-
-    return (
+    await expect(
+      this.page,
+      `Expected destination: ${expected.origin}${expected.pathname}`
+    ).toHaveURL(actual =>
       actual.origin === expected.origin &&
       actual.pathname === expected.pathname
     );
-  });
 
-const currentUrl = new URL(this.page.url());
+    console.log(
+      `[Browser] Verified URL: ${expected.origin}${expected.pathname} ` +
+      '(query parameters and fragment ignored)'
+    );
+  }
 
-console.log(
-  `[Browser] Verified URL: ` +
-  `${currentUrl.origin}${currentUrl.pathname}` +
-  ` (query parameters ignored)`
-);
-}
+  /**
+   * Checks the browser page title using an exact string or a regular expression.
+   *
+   * @param expectedTitle Expected title text or regular-expression pattern.
+   */
+  async verifyTitle(expectedTitle: string | RegExp): Promise<void> {
+    await expect(this.page).toHaveTitle(expectedTitle);
 
+    console.log(`[Browser] Verified page title: ${await this.page.title()}`);
+  }
 }
