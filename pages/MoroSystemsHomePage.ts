@@ -4,19 +4,19 @@ import { BasePage } from './BasePage';
 /**
  * Page Object for the MoroSystems website.
  *
- * Handles homepage navigation, optional cookie consent and navigation to
+ * Handles homepage navigation, optional cookie rejection and navigation to
  * Careers. Test data and destination URLs remain in the test scenarios.
  */
 export class MoroSystemsHomePage extends BasePage {
   /**
-   * Opens the homepage, handles optional cookies and verifies the destination.
+   * Opens the homepage, rejects optional cookies when prompted and verifies the destination.
    * Used by independent GUI tests that do not start at Google.
    *
    * @param url Expected absolute homepage URL.
    */
   async open(url: string): Promise<void> {
     await this.openPage(url);
-    await this.acceptCookiesIfPresent();
+    await this.rejectOptionalCookiesIfPresent();
     await this.verifyHomepage(url);
   }
 
@@ -27,11 +27,11 @@ export class MoroSystemsHomePage extends BasePage {
    * seconds for its button; only a timeout means the dialog is absent.
    * Other errors are rethrown so genuine problems do not go unnoticed.
    */
-  async acceptCookiesIfPresent(): Promise<void> {
-    const necessaryCookiesButton = this.page.locator('#cookiescript_reject');
+  async rejectOptionalCookiesIfPresent(): Promise<void> {
+    const rejectOptionalCookiesButton = this.page.locator('#cookiescript_reject');
 
     try {
-      await necessaryCookiesButton.waitFor({
+      await rejectOptionalCookiesButton.waitFor({
         state: 'visible',
         timeout: 3_000,
       });
@@ -46,10 +46,10 @@ export class MoroSystemsHomePage extends BasePage {
 
     console.log('[MoroSystems] Cookie dialog detected.');
 
-    await necessaryCookiesButton.click();
-    await expect(necessaryCookiesButton).toBeHidden();
+    await rejectOptionalCookiesButton.click();
+    await expect(rejectOptionalCookiesButton).toBeHidden();
 
-    console.log('[MoroSystems] Necessary cookies selected.');
+    console.log('[MoroSystems] Optional cookies rejected (necessary cookies only).');
   }
 
   /**
@@ -67,7 +67,7 @@ export class MoroSystemsHomePage extends BasePage {
 
   /**
    * Opens Careers by clicking a visible link on the MoroSystems website.
-   * Verifies the destination and handles a cookie dialog if one appears.
+   * Verifies the destination and rejects optional cookies if a dialog appears.
    *
    * @param expectedUrl Exact Careers page URL supplied by the test.
    */
@@ -86,7 +86,7 @@ export class MoroSystemsHomePage extends BasePage {
 
     await careersLink.click();
     await this.verifyUrl(expectedUrl);
-    await this.acceptCookiesIfPresent();
+    await this.rejectOptionalCookiesIfPresent();
 
     console.log('[MoroSystems] Careers page opened via menu.');
   }

@@ -92,7 +92,7 @@ for (const viewport of viewports) {
     await test.step('02 - Open and verify Careers page', async () => {
       // Navigate directly: mobile navigation may differ from desktop menus.
       await homePage.openPage(careersUrl);
-      await homePage.acceptCookiesIfPresent();
+      await homePage.rejectOptionalCookiesIfPresent();
       await careerPage.verifyPage(careersUrl);
     });
 

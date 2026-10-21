@@ -94,7 +94,7 @@ test.describe('MoroSystems visual regression @visual', () => {
         });
 
         await homePage.openPage(careersUrl);
-        await homePage.acceptCookiesIfPresent();
+        await homePage.rejectOptionalCookiesIfPresent();
         await careerPage.verifyPage(careersUrl);
       });
 

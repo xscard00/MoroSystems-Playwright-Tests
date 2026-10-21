@@ -6,13 +6,13 @@
   "type": "commonjs",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "playwright test --grep-invert @manual-captcha",
+    "test": "playwright test --grep-invert \"@manual-captcha|@visual\"",
     "test:list": "playwright test --list",
     "test:api": "playwright test --project=api",
-    "test:gui": "playwright test --project=chromium --project=firefox --project=webkit --grep-invert @manual-captcha",
-    "test:gui:chromium": "playwright test --project=chromium --grep-invert @manual-captcha",
-    "test:gui:firefox": "playwright test --project=firefox --grep-invert @manual-captcha",
-    "test:gui:webkit": "playwright test --project=webkit --grep-invert @manual-captcha",
+    "test:gui": "playwright test --project=chromium --project=firefox --project=webkit --grep-invert \"@manual-captcha|@visual\"",
+    "test:gui:chromium": "playwright test --project=chromium --grep-invert \"@manual-captcha|@visual\"",
+    "test:gui:firefox": "playwright test --project=firefox --grep-invert \"@manual-captcha|@visual\"",
+    "test:gui:webkit": "playwright test --project=webkit --grep-invert \"@manual-captcha|@visual\"",
     "test:google:manual": "playwright test tests/gui/google-to-career.spec.ts --project=chromium --debug --workers=1"
   },
   "devDependencies": {
